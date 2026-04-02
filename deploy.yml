@@ -1,0 +1,9 @@
+---
+- name: Déploiement de l'application customisée sur K3d
+  hosts: localhost
+  tasks:
+    - name: Déployer l'image custom-nginx
+      shell: kubectl create deployment app-custom --image=custom-nginx:latest --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Exposer le service sur le port 80
+      shell: kubectl expose deployment app-custom --type=NodePort --port=80 --name=svc-custom --dry-run=client -o yaml | kubectl apply -f -
