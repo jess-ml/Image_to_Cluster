@@ -90,3 +90,38 @@ Cet atelier, **noté sur 20 points**, est évalué sur la base du barème suivan
 - Processus travail (quantité de commits, cohérence globale, interventions externes, ...) (4 points) 
 
 
+////////////
+### Guide d'utilisation de la solution (Packer & Ansible)
+
+Cette section documente le processus mis en place pour construire notre image Nginx customisée et la déployer de manière automatisée sur le cluster K3d.
+
+#### 1. Prérequis et Installation
+Avant de commencer, il est nécessaire d'installer les outils d'Infrastructure as Code sur notre environnement (Codespace) :
+- **Packer** : Utilisé pour "packer" notre application web statique (`index.html`) à l'intérieur d'une image Nginx sur mesure.
+- **Ansible** : Utilisé pour scripter et automatiser le déploiement sur notre cluster Kubernetes.
+
+#### 2. Build de l'image customisée (Packer)
+Nous avons créé un template `build.pkr.hcl` qui ordonne à Packer de :
+1. Partir d'une image de base `nginx:latest`.
+2. Copier notre fichier local `index.html` vers le répertoire web par défaut de Nginx (`/usr/share/nginx/html/`).
+3. Tagger cette nouvelle image sous le nom `custom-nginx:latest`.
+
+*Commandes pour lancer le build :*
+`packer init build.pkr.hcl`
+`packer build build.pkr.hcl`
+
+#### 3. Importation de l'image dans K3d
+Pour que notre cluster Kubernetes puisse instancier cette image locale (qui n'est pas hébergée sur le Docker Hub public), nous devons l'importer dans le registre de K3d :
+`k3d image import custom-nginx:latest -c lab`
+
+#### 4. Déploiement automatisé (Ansible)
+Plutôt que d'exécuter nos commandes `kubectl` manuellement, nous utilisons un playbook Ansible (`deploy.yml`). Ce playbook effectue deux tâches séquentielles :
+1. Créer le déploiement Kubernetes à partir de notre image locale (avec la politique `imagePullPolicy: Never` pour forcer la lecture en local).
+2. Exposer ce déploiement via un service de type NodePort sur le port 80.
+
+*Commande pour lancer le déploiement :*
+`ansible-playbook deploy.yml`
+
+#### 5. Ouverture des ports et vérification
+Enfin, nous créons un tunnel pour exposer le service afin d'y accéder depuis notre navigateur web (via le port 8081) :
+`kubectl port-forward svc/svc-custom 8081:80 >/tmp/custom.log 2>&1 &`
