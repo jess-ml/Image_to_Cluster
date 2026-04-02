@@ -1,7 +1,117 @@
-------------------------------------------------------------------------------------------------------
-git add README.md
-git commit -m "docs: mise en forme finale du README avec blocs de code"
-git push
+# ATELIER FROM IMAGE TO CLUSTER
+
+**Objectif principal :** Cet atelier consiste à industrialiser le cycle de vie d'une application simple en construisant une image applicative Nginx personnalisée avec Packer, puis en déployant automatiquement cette application sur un cluster Kubernetes léger (K3d) à l'aide d'Ansible, le tout dans un environnement reproductible via GitHub Codespaces.
+
+---
+
+## Séquence 1 : Codespace de Github
+
+**Objectif : Création d'un Codespace Github**
+
+Pour garantir un environnement de développement reproductible et éviter les problèmes de dépendances sur nos machines locales, nous avons initialisé le projet dans le Cloud :
+
+1. **Création du Fork :** Sur la page du dépôt original, cliquez sur le bouton **Fork** en haut à droite. Cela crée une copie du projet sur votre compte personnel.
+2. **Ouverture du Codespace :** Sur votre nouveau dépôt, cliquez sur le bouton vert **Code**, puis sur l'onglet **Codespaces** et enfin sur **Create codespace on main**.
+
+---
+
+## Séquence 2 : Création du cluster Kubernetes K3d
+
+**Objectif : Créer votre cluster Kubernetes K3d**
+
+L'infrastructure est mise en place en utilisant K3d pour simuler un cluster Kubernetes complet.
+
+**1. Installation de K3d et Création du Cluster (1 master, 2 workers) :**
+
+```bash
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+k3d cluster create lab --servers 1 --agents 2
+```
+2. Vérification du cluster :
+```
+kubectl get nodes
+```
+3. Déploiement de l'application de test (Docker Mario) :
+```
+kubectl create deployment mario --image=sevenajay/mario
+kubectl expose deployment mario --type=NodePort --port=80
+kubectl port-forward svc/mario 8080:80 >/tmp/mario.log 2>&1 &
+```
+Séquence 3 : Exercice (Packer & Ansible)
+Objectif : Customisez une image Docker avec Packer et déploiement sur K3d via Ansible
+
+Cette étape automatise la création de l'image et son déploiement sur le cluster.
+
+1. Installation des outils requis :
+```
+wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt-get update && sudo apt-get install packer ansible -y
+```
+
+2. Fichier de Build Packer (build.pkr.hcl) :
+```packer {
+  required_plugins {
+    docker = {
+      version = ">= 1.0.8"
+      source  = "github.com/hashicorp/docker"
+    }
+  }
+}
+
+source "docker" "nginx" {
+  image  = "nginx:latest"
+  commit = true
+}
+
+build {
+  sources = ["source.docker.nginx"]
+  provisioner "file" {
+    source      = "index.html"
+    destination = "/usr/share/nginx/html/index.html"
+  }
+  post-processor "docker-tag" {
+    repository = "custom-nginx"
+    tags       = ["latest"]
+  }
+}
+```
+3. Fichier de Déploiement Ansible (deploy.yml) :
+```
+---
+- name: Déploiement de l'application customisée sur K3d
+  hosts: localhost
+  tasks:
+    - name: Déployer l'image custom-nginx
+      shell: kubectl create deployment app-custom --image=custom-nginx:latest --dry-run=client -o yaml | kubectl apply -f -
+    - name: Exposer le service sur le port 80
+      shell: kubectl expose deployment app-custom --type=NodePort --port=80 --name=svc-custom --dry-run=client -o yaml | kubectl apply -f -
+```
+4. Exécution du pipeline et résolution des erreurs :
+```
+# Import de l'image locale dans le cluster K3d
+k3d image import custom-nginx:latest -c lab
+
+# Lancement du déploiement via Ansible
+ansible-playbook deploy.yml
+
+# Forcer l'utilisation de l'image locale (imagePullPolicy)
+kubectl patch deployment app-custom -p '{"spec":{"template":{"spec":{"containers":[{"name":"custom-nginx","imagePullPolicy":"Never"}]}}}}'
+
+# Exposition de l'application personnalisée
+kubectl port-forward svc/svc-custom 8081:80 >/tmp/custom.log 2>&1 &
+```
+Séquence 4 : Documentation
+Objectif : Documenter et expliquer la solution
+
+La documentation finale assure la pérennité et la compréhension du projet.
+
+Ce README.md détaille chaque étape technique de l'installation au déploiement.
+
+Les fichiers de configuration sont versionnés et sauvegardés sur le dépôt GitHub.
+
+Le processus de travail est validé par des commits réguliers tout au long de l'atelie
+
 /////////////////////////////////////////////
 -------------------------
 ATELIER FROM IMAGE TO CLUSTER
