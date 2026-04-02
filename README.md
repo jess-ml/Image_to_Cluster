@@ -1,4 +1,4 @@
-# ATELIER FROM IMAGE TO CLUSTER
+# ATELIER FROM IMAGE TO CLUSTER / README à jour
 
 **Objectif principal :** Cet atelier consiste à industrialiser le cycle de vie d'une application simple en construisant une image applicative Nginx personnalisée avec Packer, puis en déployant automatiquement cette application sur un cluster Kubernetes léger (K3d) à l'aide d'Ansible, le tout dans un environnement reproductible via GitHub Codespaces.
 
