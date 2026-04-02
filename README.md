@@ -1,72 +1,51 @@
 ------------------------------------------------------------------------------------------------------
-README A JOUR:
-----------------
 ATELIER FROM IMAGE TO CLUSTER
-Objectif principal : Cet atelier a pour but d'industrialiser le cycle de vie d'une application web. Le processus part d'un code source statique pour aboutir à un déploiement fonctionnel sur un cluster Kubernetes. Nous utilisons Packer pour la création de l'image, K3d pour l'infrastructure de conteneurs, et Ansible pour l'automatisation du déploiement.
+Objectif principal : Cet atelier consiste à industrialiser le cycle de vie d'une application simple en construisant une image applicative Nginx personnalisée avec Packer, puis en déployant automatiquement cette application sur un cluster Kubernetes léger (K3d) à l'aide d'Ansible, le tout dans un environnement reproductible via GitHub Codespaces.
 
 Séquence 1 : Codespace de Github
-Objectif : Préparation de l'environnement de développement
+Objectif : Création d'un Codespace Github
 
-La première étape consiste à créer un environnement de travail isolé et pré-configuré dans le cloud.
+Pour garantir un environnement de développement reproductible et éviter les problèmes de dépendances sur nos machines locales, nous avons initialisé le projet dans le Cloud :
 
-1. Création du Fork :
-Pour travailler sur votre propre instance du projet, vous devez cliquer sur le bouton "Fork" en haut à droite de la page du dépôt original sur GitHub. Cela crée une copie exacte du projet sur votre compte personnel, vous permettant de modifier le code et de sauvegarder vos changements.
+Création du Fork : Sur la page du dépôt original, cliquez sur le bouton Fork en haut à droite. Cela crée une copie du projet sur votre compte.
 
-2. Lancement du Codespace :
-Une fois sur votre fork :
-
-Cliquez sur le bouton vert "Code".
-
-Allez dans l'onglet "Codespaces".
-
-Cliquez sur "Create codespace on main".
-GitHub va alors construire une machine virtuelle Linux avec un terminal et un éditeur de code directement dans votre navigateur.
+Ouverture du Codespace : Sur votre nouveau dépôt, cliquez sur le bouton vert Code, puis sur l'onglet Codespaces et enfin sur Create codespace on main.
 
 Séquence 2 : Création du cluster Kubernetes K3d
-Objectif : Déploiement de l'infrastructure locale
+Objectif : Créer votre cluster Kubernetes K3d
 
-Dans cette séquence, nous installons un orchestrateur de conteneurs pour héberger nos applications.
+L'infrastructure est mise en place en utilisant K3d pour simuler un cluster Kubernetes complet.
 
-1. Installation de l'outil K3d :
-
-Bash
-curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-2. Initialisation du cluster :
-Nous créons un cluster nommé "lab" avec un nœud de contrôle et deux nœuds d'exécution.
+1. Installation de K3d et Création du Cluster (1 master, 2 workers) :
 
 Bash
+curl -s [https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh](https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh) | bash
 k3d cluster create lab --servers 1 --agents 2
-3. Test de déploiement (Application Mario) :
-
-Déploiement : kubectl create deployment mario --image=sevenajay/mario
-
-Création du service : kubectl expose deployment mario --type=NodePort --port=80
-
-Accès web : Redirection du flux vers le port 8080 du Codespace :
+2. Déploiement de l'application de test (Docker Mario) :
 
 Bash
+kubectl create deployment mario --image=sevenajay/mario
+kubectl expose deployment mario --type=NodePort --port=80
 kubectl port-forward svc/mario 8080:80 >/tmp/mario.log 2>&1 &
 Séquence 3 : Exercice (Packer & Ansible)
-Objectif : Industrialisation du Build et du Déploiement
+Objectif : Customisez une image Docker avec Packer et déploiement sur K3d via Ansible
 
-Cette séquence remplace les manipulations manuelles par de l'Infrastructure as Code (IaC).
+Cette étape automatise la création de l'image et son déploiement sur le cluster.
 
-1. Installation des dépendances :
+1. Installation des outils requis :
 
 Bash
-wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+wget -O- [https://apt.releases.hashicorp.com/gpg](https://apt.releases.hashicorp.com/gpg) | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] [https://apt.releases.hashicorp.com](https://apt.releases.hashicorp.com) $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 sudo apt-get update && sudo apt-get install packer ansible -y
-2. Fichiers de configuration créés :
-
-Fichier build.pkr.hcl (Configuration Packer) :
+2. Fichier de Build Packer (build.pkr.hcl) :
 
 Terraform
 packer {
   required_plugins {
     docker = {
       version = ">= 1.0.8"
-      source  = "github.com/hashicorp/docker"
+      source  = "[github.com/hashicorp/docker](https://github.com/hashicorp/docker)"
     }
   }
 }
@@ -78,18 +57,16 @@ source "docker" "nginx" {
 
 build {
   sources = ["source.docker.nginx"]
-
   provisioner "file" {
     source      = "index.html"
     destination = "/usr/share/nginx/html/index.html"
   }
-
   post-processor "docker-tag" {
     repository = "custom-nginx"
     tags       = ["latest"]
   }
 }
-Fichier deploy.yml (Playbook Ansible) :
+3. Fichier de Déploiement Ansible (deploy.yml) :
 
 YAML
 ---
@@ -98,27 +75,27 @@ YAML
   tasks:
     - name: Déployer l'image custom-nginx
       shell: kubectl create deployment app-custom --image=custom-nginx:latest --dry-run=client -o yaml | kubectl apply -f -
-
     - name: Exposer le service sur le port 80
       shell: kubectl expose deployment app-custom --type=NodePort --port=80 --name=svc-custom --dry-run=client -o yaml | kubectl apply -f -
-3. Exécution du pipeline :
+4. Exécution du pipeline :
 
-Build Packer : packer init build.pkr.hcl && packer build build.pkr.hcl
-
-Import K3d : k3d image import custom-nginx:latest -c lab
-
-Déploiement Ansible : ansible-playbook deploy.yml
-
+Bash
+packer init build.pkr.hcl
+packer build build.pkr.hcl
+k3d image import custom-nginx:latest -c lab
+ansible-playbook deploy.yml
+kubectl patch deployment app-custom -p '{"spec":{"template":{"spec":{"containers":[{"name":"custom-nginx","imagePullPolicy":"Never"}]}}}}'
+kubectl port-forward svc/svc-custom 8081:80 >/tmp/custom.log 2>&1 &
 Séquence 4 : Documentation
-Objectif : Capitalisation et pérennité du projet
+Objectif : Documenter et expliquer la solution
 
-La dernière étape consiste à rédiger ce document pour expliquer la solution.
+La documentation finale assure la pérennité et la compréhension du projet.
 
-Ce README détaille chaque commande.
+Ce README.md détaille chaque étape technique.
 
-Les fichiers de configuration sont sauvegardés sur le dépôt.
+Les fichiers de configuration sont versionnés sur GitHub.
 
-Le processus est validé par des sauvegardes régulières (git add, commit, push).
+Le processus de travail est validé par des commits réguliers.
 /////////////////////////////////////////////
 -------------------------
 ATELIER FROM IMAGE TO CLUSTER
